@@ -32,7 +32,7 @@ This repository contains code for a project that reads protein sequences, perfor
     ```python
     enzyme1_fasta = "CrtB.fasta"
     enzyme2_fasta = "crtM.fasta"
-    alignment_file = "CrtB.aln"
+    alignment_file = "Align.aln"
     ```
 
 2. Run the script to perform sequence alignment, feature extraction, and model training:
