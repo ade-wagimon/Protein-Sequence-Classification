@@ -117,7 +117,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 
 
 ## Bonus
-
+```
   +--------------------------+
   | Read Protein Sequences   |
   | (CrtB.fasta, crtM.fasta) |
@@ -200,6 +200,6 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
   | - Confusion Matrix (heatmap) |
   | - Training History (plots)   |
   +------------------------------+
-
+```
 
 ---
