@@ -141,3 +141,82 @@ def evaluate_model(model, X_test, y_test):
 
 # Evaluate voting classifier
 evaluate_model(voting_clf, X_test, y_test)
+
+
+
+
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Dense, Lambda, LSTM, RepeatVector, Concatenate
+from tensorflow.keras.models import Model
+import numpy as np
+import tensorflow.keras.backend as K
+
+# Parameters
+latent_dim = 10  # Adjust based on sequence complexity
+timesteps, features = X_encoded.shape[1], X_encoded.shape[2]
+function_dim = function_labels.shape[1]  # Dimension of functional attributes
+
+# Encoder
+sequence_input = Input(shape=(timesteps, features), name="sequence_input")
+function_input = Input(shape=(function_dim,), name="function_input")
+
+# LSTM-based encoding
+x = LSTM(64)(sequence_input)
+x = Concatenate()([x, function_input])  # Concatenate functional information
+z_mean = Dense(latent_dim, name="z_mean")(x)
+z_log_var = Dense(latent_dim, name="z_log_var")(x)
+
+# Sampling function
+def sampling(args):
+    z_mean, z_log_var = args
+    batch = K.shape(z_mean)[0]
+    dim = K.int_shape(z_mean)[1]
+    epsilon = K.random_normal(shape=(batch, dim))
+    return z_mean + K.exp(0.5 * z_log_var) * epsilon
+
+z = Lambda(sampling, output_shape=(latent_dim,), name="z")([z_mean, z_log_var])
+
+# Decoder
+decoder_h = Dense(64, activation='relu')
+decoder_lstm = LSTM(features, return_sequences=True)
+decoder_output = Dense(features, activation='softmax', name="decoder_output")
+
+# Decoding process with function input
+z_decoded = Concatenate()([z, function_input])  # Add function info to latent space
+h_decoded = RepeatVector(timesteps)(z_decoded)
+h_decoded = decoder_lstm(h_decoded)
+outputs = decoder_output(h_decoded)
+
+# VAE Model
+cvae = Model([sequence_input, function_input], outputs)
+
+# Loss Function
+def cvae_loss(inputs, outputs):
+    reconstruction_loss = tf.reduce_mean(tf.square(inputs - outputs))  # Adjust if using other encoding methods
+    kl_loss = -0.5 * K.mean(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var))
+    return reconstruction_loss + kl_loss
+
+cvae.compile(optimizer='adam', loss=cvae_loss)
+
+# Train the CVAE model
+cvae.fit([X_encoded, function_labels], X_encoded, epochs=100, batch_size=32)  # Adjust epochs as needed
+
+# Generate new enzyme sequences conditioned on function
+# Define decoder separately for generation
+encoder = Model([sequence_input, function_input], z_mean)  # Encoder for latent space mapping
+decoder_input_z = Input(shape=(latent_dim,))
+decoder_input_function = Input(shape=(function_dim,))
+z_decoded_with_function = Concatenate()([decoder_input_z, decoder_input_function])
+h_decoded = RepeatVector(timesteps)(z_decoded_with_function)
+h_decoded = decoder_lstm(h_decoded)
+decoded_sequence_output = decoder_output(h_decoded)
+decoder = Model([decoder_input_z, decoder_input_function], decoded_sequence_output)
+
+# Sample from the latent space conditioned on a specific function
+n_samples = 10
+sampled_latent_vectors = np.random.normal(size=(n_samples, latent_dim))
+specific_function = np.array([desired_function] * n_samples)  # Set the desired functional label here
+generated_sequences = decoder.predict([sampled_latent_vectors, specific_function])
+
+# Post-process generated sequences
+
