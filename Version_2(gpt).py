@@ -145,6 +145,73 @@ evaluate_model(voting_clf, X_test, y_test)
 
 
 
+
+import tensorflow as tf
+from tensorflow.keras.layers import Input, Dense, Lambda, LSTM, RepeatVector
+from tensorflow.keras.models import Model
+from tensorflow.keras.losses import binary_crossentropy
+import numpy as np
+import tensorflow.keras.backend as K
+
+# Latent space dimensions
+latent_dim = 10  # Adjust based on complexity of sequences
+timesteps, features = X_encoded.shape[1], X_encoded.shape[2]
+
+# VAE model definition
+# Encoder
+inputs = Input(shape=(timesteps, features))
+h = LSTM(64, return_sequences=False)(inputs)
+z_mean = Dense(latent_dim)(h)
+z_log_var = Dense(latent_dim)(h)
+
+def sampling(args):
+    z_mean, z_log_var = args
+    batch = K.shape(z_mean)[0]
+    dim = K.int_shape(z_mean)[1]
+    epsilon = K.random_normal(shape=(batch, dim))
+    return z_mean + K.exp(0.5 * z_log_var) * epsilon
+
+z = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
+
+# Decoder
+decoder_h = Dense(64, activation='relu')
+decoder_lstm = LSTM(features, return_sequences=True)
+decoder_mean = Dense(features, activation='softmax')
+
+h_decoded = RepeatVector(timesteps)(z)
+h_decoded = decoder_lstm(h_decoded)
+outputs = decoder_mean(h_decoded)
+
+# VAE model
+vae = Model(inputs, outputs)
+
+# VAE loss
+def vae_loss(inputs, outputs):
+    reconstruction_loss = binary_crossentropy(K.flatten(inputs), K.flatten(outputs))
+    kl_loss = -0.5 * K.mean(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+    return reconstruction_loss + kl_loss
+
+vae.compile(optimizer='adam', loss=vae_loss)
+
+# Training VAE
+vae.fit(X_encoded, X_encoded, epochs=100, batch_size=32)  # Adjust epochs and batch size as needed
+
+# Generating new sequences
+encoder = Model(inputs, z_mean)  # Encoder part to map inputs to latent space
+decoder_input = Input(shape=(latent_dim,))
+_h_decoded = RepeatVector(timesteps)(decoder_input)
+_h_decoded = decoder_lstm(_h_decoded)
+_outputs_decoded = decoder_mean(_h_decoded)
+decoder = Model(decoder_input, _outputs_decoded)
+
+# Sample from the latent space to generate new sequences
+n_samples = 10  # Number of sequences to generate
+random_latent_vectors = np.random.normal(size=(n_samples, latent_dim))
+generated_sequences = decoder.predict(random_latent_vectors)
+
+# Post-process generated sequences as needed for interpretation
+
+
 import tensorflow as tf
 from tensorflow.keras.layers import Input, Dense, Lambda, LSTM, RepeatVector, Concatenate
 from tensorflow.keras.models import Model
